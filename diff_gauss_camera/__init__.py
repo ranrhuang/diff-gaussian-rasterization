@@ -30,6 +30,7 @@ def rasterize_gaussians(
     norm3Ds_precomp,
     extra_attrs,
     viewmatrix,
+    projmatrix,
     raster_settings,
 ):
     color, depth, norm, alpha, radii, extra = _RasterizeGaussians.apply(
@@ -44,6 +45,7 @@ def rasterize_gaussians(
         norm3Ds_precomp,
         extra_attrs,
         viewmatrix,
+        projmatrix,
         viewmatrix.inverse()[3, :3],
         raster_settings,
     )
@@ -67,6 +69,7 @@ class _RasterizeGaussians(torch.autograd.Function):
         norm3Ds_precomp,
         extra_attrs,
         viewmatrix,
+        projmatrix,
         campos,
         raster_settings,
     ):
@@ -86,7 +89,7 @@ class _RasterizeGaussians(torch.autograd.Function):
             extra_attrs,
             extra_attrs.shape[1] if extra_attrs.shape[0] != 0 else 0,
             viewmatrix,
-            viewmatrix @ raster_settings.projmatrix,
+            viewmatrix @ projmatrix,
             raster_settings.tanfovx,
             raster_settings.tanfovy,
             raster_settings.image_height,
@@ -171,7 +174,7 @@ class _RasterizeGaussians(torch.autograd.Function):
         # D = W * X
         # dL/dW = dL/dD * dD/dW = dL/dD * X^T
         grad_viewmatrix = grad_viewmatrix + grad_projmatrix @ raster_settings.projmatrix.transpose(0, 1)
-
+        grad_projmatrix = viewmatrix.transpose(0,1) @ grad_projmatrix # MODIFIED
         grads = (
             grad_means3D,
             grad_means2D,
@@ -184,6 +187,7 @@ class _RasterizeGaussians(torch.autograd.Function):
             grad_norm3Ds_precomp,
             grad_extra_attrs,
             grad_viewmatrix,
+            grad_projmatrix, # MODIFIED
             grad_campos,
             None
         )
@@ -221,7 +225,7 @@ class GaussianRasterizer(nn.Module):
             
         return visible
 
-    def forward(self, means3D, means2D, opacities, viewmatrix, shs = None, colors_precomp = None, scales = None, rotations = None, cov3Ds_precomp = None, norm3Ds_precomp=None, extra_attrs=None):
+    def forward(self, means3D, means2D, opacities, viewmatrix, projmatrix, shs = None, colors_precomp = None, scales = None, rotations = None, cov3Ds_precomp = None, norm3Ds_precomp=None, extra_attrs=None):
         
         raster_settings = self.raster_settings
 
@@ -261,6 +265,7 @@ class GaussianRasterizer(nn.Module):
             norm3Ds_precomp,
             extra_attrs,
             viewmatrix,
+            projmatrix,
             raster_settings, 
         )
 
